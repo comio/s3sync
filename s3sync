@@ -1,3 +1,55 @@
 #!/bin/bash
 
+S3SYNC_CONF=/etc/s3sync
+S3SYNC_CONFD=/etc/s3sync/conf.d
 
+do_dryrun()
+{
+	echo "dryrun"
+}
+
+do_help()
+{
+	echo "help"
+}
+
+do_setconfig()
+{
+	echo "seconfig ${S3SYNC_CONF}"
+}
+
+do_unknown()
+{
+	echo "unknown"
+}
+
+# Parsing command line
+
+set -- `getopt -n $0 -o hc:d --long help,conf-dir:dry-run -- "$@"`
+
+if [ $? -eq 0 ]; then
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-h|--help)
+				do_help
+				exit 0
+				;;
+			-c|--conf-dir)
+				shift
+				echo "conf-dir $1"
+				;;
+			-d|--dry-run)
+				echo "dry-run"
+				;;
+			--)
+				echo "params:"
+				;;
+			*)
+				echo "       $1"
+				;;
+		esac
+		shift
+	done
+else
+	echo error
+fi
