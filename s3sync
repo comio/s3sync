@@ -29,18 +29,28 @@ do_help()
 	cat << EOF
 	Usage: $0 [params...] [conf(s)..]
 
-		-h|--help
-			This help.
+		{-h|--help}
+			Print this help and exit.
 
-		--conf configuration.conf
+		--conf file.conf
+			Load the provided configuration file.
 			
-		--conf-dir)
+		--conf-dir ${S3SYNC_CONFDIR}
+			Set the configurtion dir (default ${S3SYNC_CONFDIR})
 
-		--dest|--to)
+		{--dest|--to} destination
+			Set the destination directory (or Amazon S3 Bucket) in standalone mode.
+			
+		--dry-run
+			Enable the dry-run mode. Use this to test your configuration.
+
+		--extra-opts "extra options"
+			Pass the options to "aws s3 sync" tool.
 		
-		--dry-run)
-		--extra-opts)
-		--source|--from)
+		{--source|--from} source
+			Set the source directory (or Amazon S3 Bucket) in standalone mode.
+
+
 EOF
 }
 
