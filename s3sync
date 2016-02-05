@@ -1,31 +1,52 @@
 #!/bin/bash
 
-S3SYNC_CONF=/etc/s3sync
-S3SYNC_CONFD=/etc/s3sync/conf.d
+S3SYBC_CMD="aws s3 sync"
 
-do_dryrun()
+S3SYNC_CONFDIR="/etc/s3sync"
+_S3SYNC_STANDALONE=0
+_S3SYNC_CONFS=""
+_S3SYNC_DRYRUN=0
+_S3SYNC_S3EXTRAOPTS=""
+_S3SYNC_SRCPATH=""
+_S3SYNC_DSTPATH=""
+
+do_reset_vars()
 {
-	echo "dryrun"
+	S3SYNC_DRYRUN=0
+	S3SYNC_S3EXTRAOPTS=""
+	S3SYNC_SRCPATH=""
+	S3SYNC_DSTPATH=""
+}
+
+do_s3_sync()
+{
+	[ ${S3SYNC_DRYRUN} -eq 1 ] && S3SYNC_DRYRUN_OPT=--dryrun
+	echo "aws s3 sync ${S3SYNC_DRYRUN_OPT}" "${S3SYNC_S3EXTRAOPTS}" "${S3SYNC_SRCPATH}" "${S3SYNC_DSTPATH}"
 }
 
 do_help()
 {
-	echo "help"
-}
+	cat << EOF
+	Usage: $0 [params...] [conf(s)..]
 
-do_setconfig()
-{
-	echo "seconfig ${S3SYNC_CONF}"
-}
+		-h|--help
+			This help.
 
-do_unknown()
-{
-	echo "unknown"
+		--conf configuration.conf
+			
+		--conf-dir)
+
+		--dest|--to)
+		
+		--dry-run)
+		--extra-opts)
+		--source|--from)
+EOF
 }
 
 # Parsing command line
 
-set -- `getopt -n $0 -o hc:d --long help,conf-dir:dry-run -- "$@"`
+set -- `getopt -n $0 -o h --long help,conf:,conf-dir:,dest:,to:,dry-run,extra-opts:,source:,from: -- "$@"`
 
 if [ $? -eq 0 ]; then
 	while [ $# -ne 0 ]; do
@@ -34,18 +55,36 @@ if [ $? -eq 0 ]; then
 				do_help
 				exit 0
 				;;
-			-c|--conf-dir)
+			--conf)
 				shift
-				echo "conf-dir $1"
+				_S3SYNC_CONFS="${_S3SYNC_CONFS} $1"
 				;;
-			-d|--dry-run)
-				echo "dry-run"
+			--conf-dir)
+				shift
+				S3SYNC_CONFDIR=$1
+				;;
+			--dest|--to)
+				shift
+				_S3SYNC_DESTPATH="$1"
+				_S3SYNC_STANDALONE=1
+				;;
+			--dry-run)
+				_S3SYNC_DRYRUN=1
+				;;
+			--extra-opts)
+				shift
+				_S3SYNC_S3_EXTRAOPTS="${_S3SYNC_S3_EXTRAOPTS} $1"
+				;;
+			--source|--from)
+				shift
+				_S3SYNC_SRCPATH="$1"
+				_S3SYNC_STANDALONE=1
 				;;
 			--)
-				echo "params:"
 				;;
 			*)
-				echo "       $1"
+				_S3SYNC_CONFS="${_S3SYNC_CONFS} $1"
+				exit 1
 				;;
 		esac
 		shift
@@ -53,3 +92,25 @@ if [ $? -eq 0 ]; then
 else
 	echo error
 fi
+
+if [ ${_S3SYNC_STANDALONE} -eq 1 ]; then
+	S3SYNC_DRYRUN=${_S3SYNC_DRYRUN}
+	S3SYNC_S3EXTRAOPTS="${_S3SYNC_S3EXTRAOPTS}"
+	S3SYNC_SRCPATH="${_S3SYNC_SRCPATH}"
+	S3SYNC_DSTPATH="${_S3SYNC_DSTPATH}"
+	do_s3_sync
+else
+	[ -z "${_S3SYNC_CONFS}" ] && _S3SYNC_CONFS="$(eval echo ${S3SYNC_CONFDIR}/*.conf)"
+
+	for S3SYNC_CONF in ${_S3SYNC_CONFS}; do
+		if [ -f "${S3SYNC_CONF}" ]; then
+			do_reset_vars
+			. "${S3SYNC_CONF}"
+			if [ $_S3SYNC_DRYRUN -eq 1 ]; then
+				S3SYNC_DRYRUN=1
+			fi
+			do_s3_sync
+		fi
+	done
+fi
+
