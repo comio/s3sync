@@ -1,7 +1,7 @@
 #!/bin/bash
 
 S3SYNC_CMD="aws s3 sync"
-S3SYNC_CONFDIR="/home/comio/develop/s3sync/conf"
+S3SYNC_CONFDIR="/etc/s3sync/conf"
 S3SYNC_CONF="default"
 S3SYNC_CONFFILE=""
 S3SYNC_DO="help"
@@ -101,9 +101,9 @@ do_set_vars()
 	[ ${_S3SYNC_STORAGECLASS_FORCED} -eq 1 ] && S3SYNC_STORAGECLASS="${_S3SYNC_STORAGECLASS}"
 	[ ${_S3SYNC_AWS_USERNAME_FORCED} -eq 1 ] && S3SYNC_AWS_USERNAME="${_S3SYNC_AWS_USERNAME}"
 	[ ${_S3SYNC_AWS_ACCESSKEYID_FORCED} -eq 1 ] && S3SYNC_AWS_ACCESSKEYID="${_S3SYNC_AWS_ACCESSKEYID}"
-	[ ${_S3SYNC_AWS_SECRETACCESSKEY_FORCED} ] && S3SYNC_AWS_SECRETACCESSKEY="${_S3SYNC_AWS_SECRETACCESSKEY}"
-	[ ${_S3SYNC_AWS_REGION_FORCED} ] && S3SYNC_AWS_REGION="${_S3SYNC_AWS_REGION}"
-	[ ${_S3SYNC_AWS_PROFILE_FORCED} ] && S3SYNC_AWS_PROFILE="${_S3SYNC_AWS_PROFILE}"
+	[ ${_S3SYNC_AWS_SECRETACCESSKEY_FORCED} -eq 1 ] && S3SYNC_AWS_SECRETACCESSKEY="${_S3SYNC_AWS_SECRETACCESSKEY}"
+	[ ${_S3SYNC_AWS_REGION_FORCED} -eq 1 ] && S3SYNC_AWS_REGION="${_S3SYNC_AWS_REGION}"
+	[ ${_S3SYNC_AWS_PROFILE_FORCED} -eq 1 ] && S3SYNC_AWS_PROFILE="${_S3SYNC_AWS_PROFILE}"
 }
 
 do_write_conf()
@@ -131,7 +131,6 @@ do_set_conffile()
 	local CONF="$1"
 	[ -z "${CONF}" ] && CONF="default"
 	S3SYNC_CONFFILE="${S3SYNC_CONFDIR}/${CONF}.conf"
-	echo conf file is "$S3SYNC_CONFFILE"
 }
 
 do_modify_conf()
@@ -157,8 +156,37 @@ do_execute()
 	if [ -f "${S3SYNC_CONFFILE}" ]; then
 		[ -f "${S3SYNC_CONFFILE}" ] && . "${S3SYNC_CONFFILE}"
 		do_set_vars
+		if [ ${S3SYNC_ENABLE} -eq 1 ]; then
+			local AWS_PROFILE_OPT="${S3SYNC_AWS_PROFILE:+--profile ${S3SYNC_AWS_PROFILE}}"
+			local AWS_REGION_OPT="${S3SYNC_AWS_REGION:+--region ${S3SYNC_AWS_REGION}}"
+			local AWS_INCLUDE_OPT=""
+			set -f
+			for i in ${S3SYNC_INCLUDE}; do
+				AWS_INCLUDE_OPT="${AWS_INCLUDE_OPT} --include \"$i\""
+			done
+			set +f
+			local AWS_EXCLUDE_OPT=""
+			set -f
+			for i in ${S3SYNC_EXCLUDE}; do
+				AWS_EXCLUDE_OPT="${AWS_EXCLUDE_OPT} --exclude \"$i\""
+			done
+			set +f
+			local AWS_DRYRUN_OPT
+			[ ${S3SYNC_DRYRUN} -eq 1 ] && AWS_DRYRUN_OPT="--dryrun"
+			local AWS_STORAGECLASS_OPT="${S3SYNC_STORAGECLASS:+--storage-class ${S3SYNC_STORAGECLASS}}"
 
-		env
+			AWS_ACCESS_KEY_ID="${S3SYNC_AWS_ACCESSKEYID}" \
+			AWS_SECRET_ACCESS_KEY="${S3SYNC_AWS_SECRETACCESSKEY}" \
+			eval aws s3 sync \
+							${AWS_PROFILE_OPT} \
+							${AWS_REGION_OPT} \
+							${AWS_EXCLUDE_OPT} \
+							${AWS_INCLUDE_OPT} \
+							${AWS_DRYRUN_OPT} \
+							${AWS_STORAGECLASS_OPT} \
+							${S3SYNC_S3EXTRAOPTS} \
+										"${S3SYNC_SRCPATH}" "${S3SYNC_DSTPATH}"
+		fi
 	else
 		echo "Configuration ${S3SYNC_CONFFILE} doesn't exist."
 		exit 1
@@ -167,12 +195,65 @@ do_execute()
 
 do_help()
 {
-	echo "help"
+	cat << EOF
+
+	Usage: s3sync {PARAMETER...} ACTION
+
+	ACTIONs:
+		create	Create a new configuration file.
+		modify	Modify an existing configuration file.
+		execute	Execute using an existing configuration file.
+
+	PARAMETERs:
+		--help
+			Show this help and exit.
+		--conf-dir=Directory
+			Set the root of configurations directory (default: ${S3SYNC_CONFDIR}).
+		--conf=configuration_name
+			Use the configuration name to setup the environment.
+		--description=Description
+			Set the configuration's description.
+		--dry-run
+			Simulate the command.
+		--no-dry-run
+			Execute the command.
+		--enable
+			Enable the configuration.
+		--disable
+			Disable the configuration.
+		--src=Directory
+		--source=Directory
+		--from=Directory
+			Set the source directory/bucket
+		--dst=Directory
+		--dest=Directory
+		--destination=Directory
+		--to=Directory
+			Set the destination directory/bucket
+		--exclude-pattern=pattern
+			Add an exclude string pattern.
+		--include-pattern=pattern
+			Add an include string pattern.
+		--extra-opts=string
+			Extra options to pass 'aws' command.
+		--storage-class=string
+			Set the storage class.
+		--aws-user-name=string
+			Set the AWS User-Name.
+		--aws-access-key-id=string
+			Set the AWS Access Key Identifier.
+		--aws-secret-access-key=string
+			Set the AWS Secrete Access Key string.
+		--aws-region=string
+			Set the AWS region.
+		--aws-profile=string
+			Set the AWS profile name.
+
+EOF
 }
 
 # Parsing command line
 
-echo "command line $0 $@"
 set -- `getopt -n $0 -o h -u --longoptions " \
 	help,
 	conf-dir:,
@@ -205,120 +286,99 @@ if [ $? -eq 0 ]; then
 			--conf-dir)
 				shift
 				S3SYNC_CONFDIR="${1}"
-				echo "Set conf dir to ${S3SYNC_CONFDIR}"
 				;;
 			--conf)
 				shift
 				S3SYNC_CONF="${1}"
-				echo "Set config to $S3SYNC_CONF"
 				;;
 			--description)
 				shift
 				_S3SYNC_DESCRIPTION="${1}"
 				_S3SYNC_DESCRIPTION_FORCED=1
-				echo "Set description to $_S3SYNC_DESCRIPTION"
 				;;
 			--dry-run)
 				_S3SYNC_DRYRUN=1
 				_S3SYNC_DRYRUN_FORCED=1
-				echo "Dry-run enabled"
 				;;
 			--no-dry-run)
 				_S3SYNC_DRYRUN=0
 				_S3SYNC_DRYRUN_FORCED=1
-				echo "Dry-run disabled"
 				;;
 			--enable)
 				_S3SYNC_ENABLE=1
 				_S3SYNC_ENABLE_FORCED=1
-				echo "Configuration enabled"
 				;;
 			--disable)
 				_S3SYNC_ENABLE=0
 				_S3SYNC_ENABLE_FORCED=1
-				echo "Configuration disabled"
 				;;
 			--src|--source|--from)
 				shift
 				_S3SYNC_SRCPATH="${1}"
 				_S3SYNC_SRCPATH_FORCED=1
-				echo "Set source path to $_S3SYNC_SRCPATH"
 				;;
 			--dst|--dest|--destination|--to)
 				shift
 				_S3SYNC_DSTPATH="${1}"
 				_S3SYNC_DSTPATH_FORCED=1
-				echo "Set destination path to $_S3SYNC_DSTPATH"
 				;;
 			--exclude-pattern)
 				shift
-				_S3SYNC_EXCLUDE="${1}"
+				_S3SYNC_EXCLUDE="${_S3SYNC_EXCLUDE:+${_S3SYNC_EXCLUDE} }${1}"
 				_S3SYNC_EXCLUDE_FORCED=1
-				echo "Set exclude pattern to $_S3SYNC_EXCLUDE"
 				;;
 			--include-pattern)
 				shift
-				_S3SYNC_INCLUDE="${1}"
+				_S3SYNC_INCLUDE="${_S3SYNC_INCLUDE:+${_S3SYNC_INCLUDE} }${1}"
 				_S3SYNC_INCLUDE_FORCED=1
-				echo "Set include pattern to $_S3SYNC_INCLUDE"
 				;;
 			--extra-opts)
 				shift
 				_S3SYNC_S3EXTRAOPTS="${1}"
 				_S3SYNC_S3EXTRAOPTS_FORCED=1
-				echo "Set extra options to $_S3SYNC_S3EXTRAOPTS"
 				;;
 			--storage-class)
 				shift
 				_S3SYNC_STORAGECLASS="${1}"
 				_S3SYNC_STORAGECLASS_FORCED=1
-				echo "Set Storage class to %_S3SYNC_STORAGECLASS"
 				;;
 			--aws-user-name)
 				shift
 				_S3SYNC_AWS_USERNAME="${1}"
 				_S3SYNC_AWS_USERNAME_FORCED=1
-				echo "Set AWS Username to ${_S3SYNC_AWS_USERNAME}"
 				;;
 			--aws-access-key-id)
 				shift
 				_S3SYNC_AWS_ACCESSKEYID="${1}"
 				_S3SYNC_AWS_ACCESSKEYID_FORCED=1
-				echo "Set AWS Access key ID"
 				;;
 			--aws-secret-access-key)
 				shift
 				_S3SYNC_AWS_SECRETACCESSKEY="${1}"
 				_S3SYNC_AWS_SECRETACCESSKEY_FORCED=1
-				echo "Set AWS Secret Access key"
 				;;
 			--aws-region)
 				shift
 				_S3SYNC_AWS_REGION="${1}"
 				_S3SYNC_AWS_REGION_FORCED=1
-				echo "Set AWS Region set to ${_S3SYNC_AWS_REGION}"
 				;;
 			--aws-profile)
 				shift
 				_S3SYNC_AWS_PROFILE="${1}"
 				_S3SYNC_AWS_PROFILE_FORCED=1
-				echo "Set AWS Profile set to ${_S3SYNC_AWS_PROFILE}"
 				;;
 			--)
 				S3SYNC_ACTION=1
 				;;
-			generate)
-				echo "Generate new conf"
+			create)
 				do_generate_conf "${S3SYNC_CONF}"
 				exit 0
 				;;
 			modify)
-				echo "Modify conf"
 				do_modify_conf "${S3SYNC_CONF}"
 				exit 0
 				;;
 			execute)
-				echo "Execute"
 				do_execute
 				exit 0
 				;;
