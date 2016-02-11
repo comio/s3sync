@@ -375,6 +375,7 @@ if [ $? -eq 0 ]; then
 			execute)
 				do_execute
 				exit 0
+				;;
 			help)
 				do_help
 				exit 0
