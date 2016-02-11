@@ -200,13 +200,12 @@ do_help()
 	Usage: s3sync {PARAMETER...} ACTION
 
 	ACTIONs:
+		help	Show this help and exit.
 		create	Create a new configuration file.
 		modify	Modify an existing configuration file.
 		execute	Execute using an existing configuration file.
 
 	PARAMETERs:
-		--help
-			Show this help and exit.
 		--conf-dir=Directory
 			Set the root of configurations directory (default: ${S3SYNC_CONFDIR}).
 		--conf=configuration_name
@@ -254,8 +253,7 @@ EOF
 
 # Parsing command line
 
-set -- `getopt -n $0 -o h -u --longoptions " \
-	help,
+set -- `getopt -n $0 -u --longoptions " \
 	conf-dir:,
 	conf:,
 	description:,
@@ -279,10 +277,6 @@ set -- `getopt -n $0 -o h -u --longoptions " \
 if [ $? -eq 0 ]; then
 	while [ $# -ne 0 ]; do
 		case "$1" in
-			-h|--help)
-				do_help
-				exit 0
-				;;
 			--conf-dir)
 				shift
 				S3SYNC_CONFDIR="${1}"
@@ -380,6 +374,9 @@ if [ $? -eq 0 ]; then
 				;;
 			execute)
 				do_execute
+				exit 0
+			help)
+				do_help
 				exit 0
 				;;
 		esac
